@@ -140,7 +140,7 @@ static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_buffer_size(
  * Report an out-of-bounds memory error and abort execution.
  */
 extern _LOWFAT_NORETURN void lowfat_oob_error(unsigned _info,
-    const void *_ptr, const void *_baseptr);
+    void *_ptr, void *_baseptr);
 
 /*
  * Report an out-of-bounds memory error was a warning only.
@@ -152,8 +152,8 @@ extern void lowfat_oob_warning(unsigned _info, const void *_ptr,
  * Check if the given pointer is OOB.  If it is then abort with a call to
  * lowfat_oob_error().
  */
-extern void lowfat_oob_check(unsigned _info, const void *_ptr, size_t _size,
-    const void *_baseptr);
+extern void lowfat_oob_check(unsigned _info, void *_ptr, size_t _size,
+    void *_baseptr);
 
 /*
  * Safe replacement malloc().

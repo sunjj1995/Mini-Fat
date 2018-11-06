@@ -1046,19 +1046,38 @@ static void insertBoundsCheck(const DataLayout *DL, Instruction *I, Value *Ptr,
             (info == LOWFAT_OOB_ERROR_READ || info == LOWFAT_OOB_ERROR_WRITE))
     {
         Type *Ty = Ptr->getType();
+        
         if (auto *PtrTy = dyn_cast<PointerType>(Ty))
         {
             Ty = PtrTy->getElementType();
             size = DL->getTypeAllocSize(Ty)-1;
         }
     }
+    // printf("Type: %d\n",Ptr->getType()->getTypeID());
     Value *Size = builder.getInt64(size);
-    Ptr = builder.CreateBitCast(Ptr, builder.getInt8PtrTy());
+    Value *allocPtr = builder.CreateAlloca(Type::getInt64PtrTy(M->getContext()));
+    // printf("AllocType: %d\n",allocPtr->getType()->getTypeID());
+    builder.CreateStore(Ptr,allocPtr);
+    Value *TPtr = builder.CreateBitCast(allocPtr, builder.getInt8PtrTy());
+    // Ptr = builder.CreateBitCast(Ptr, builder.getInt8PtrTy());
     Value *BoundsCheck = M->getOrInsertFunction("lowfat_oob_check",
         builder.getVoidTy(), builder.getInt32Ty(), builder.getInt8PtrTy(),
         builder.getInt64Ty(), builder.getInt8PtrTy(), nullptr);
+    // builder.CreateCall(BoundsCheck,
+    //     {builder.getInt32(info), Ptr, Size, BasePtr});
     builder.CreateCall(BoundsCheck,
-        {builder.getInt32(info), Ptr, Size, BasePtr});
+        {builder.getInt32(info), TPtr, Size, BasePtr});
+    // Value *tmp = ConstantInt::get(Type::getInt64Ty(M->getContext()),4);
+    // builder.CreateStore(tmp,allocPtr);
+    Ptr = builder.CreateLoad(allocPtr);
+    if(dyn_cast<StoreInst>(I) || dyn_cast<LoadInst>(I)) {
+        for (auto OI = I->op_begin(), OE = I->op_end(); OI != OE; ++OI) {     
+            if((*OI)->getType()->getTypeID () == 15) {
+                *OI = Ptr;
+            }
+        }
+    }
+    
 }
 
 /*
@@ -1171,7 +1190,11 @@ static void addLowFatFuncs(Module *M)
         IRBuilder<> builder(Entry);
         auto i = F->getArgumentList().begin();
         Value *Info = &(*(i++));
-        Value *Ptr = &(*(i++));
+        Value *TPtr = &(*(i++));
+        TPtr = builder.CreateBitCast(TPtr, Type::getInt64PtrTy(M->getContext()));
+        Value *Ptr = builder.CreateLoad(TPtr);
+        // 判断是否越界用 一级指针
+        Ptr = builder.CreateBitCast(Ptr, builder.getInt8PtrTy());
         Value *AccessSize = &(*(i++));
         Value *BasePtr = &(*(i++));
         Value *IBasePtr = builder.CreatePtrToInt(BasePtr,
@@ -1192,23 +1215,38 @@ static void addLowFatFuncs(Module *M)
         builder.CreateCondBr(Cmp, Error, Return);
         
         IRBuilder<> builder2(Error);
-        if (!option_no_abort)
-        {
-            Value *Error = M->getOrInsertFunction("lowfat_oob_error",
+        // if (!option_no_abort)
+        // {
+            // 根据上下界修改值用二级指针
+            TPtr = builder2.CreateBitCast(TPtr, builder.getInt8PtrTy());
+
+            Value *tError = M->getOrInsertFunction("lowfat_oob_error",
                 builder2.getVoidTy(), builder2.getInt32Ty(),
                 builder2.getInt8PtrTy(), builder2.getInt8PtrTy(), nullptr);
-            CallInst *Call = builder2.CreateCall(Error, {Info, Ptr, BasePtr});
+            CallInst *Call = builder2.CreateCall(tError, {Info, TPtr, BasePtr});
+            
+
+            // Value *tmp = ConstantInt::get(Type::getInt64Ty(M->getContext()),4);
+            // Value *DPtr = builder2.CreatePtrToInt(BasePtr, builder2.getInt64Ty());
+            // Value *TPtr = builder2.CreateAdd(DPtr, AccessSize);
+            // TPtr = builder2.CreateSub(TPtr,tmp);
+            // Ptr = builder2.CreateIntToPtr(TPtr, builder2.getInt64Ty()->getPointerTo());
+
+            builder2.CreateRetVoid();
+            
+            /*
             Call->setDoesNotReturn();
             builder2.CreateUnreachable();
-        }
-        else
-        {
-            Value *Warning = M->getOrInsertFunction("lowfat_oob_warning",
-                builder2.getVoidTy(), builder2.getInt32Ty(),
-                builder2.getInt8PtrTy(), builder2.getInt8PtrTy(), nullptr);
-            builder2.CreateCall(Warning, {Info, Ptr, BasePtr});
-            builder2.CreateRetVoid();
-        }
+            */            
+        // }
+        // else
+        // {
+        //     Value *Warning = M->getOrInsertFunction("lowfat_oob_warning",
+        //         builder2.getVoidTy(), builder2.getInt32Ty(),
+        //         builder2.getInt8PtrTy(), builder2.getInt8PtrTy(), nullptr);
+        //     builder2.CreateCall(Warning, {Info, Ptr, BasePtr});
+        //     builder2.CreateRetVoid();
+        // }
 
         IRBuilder<> builder3(Return);
         builder3.CreateRetVoid();

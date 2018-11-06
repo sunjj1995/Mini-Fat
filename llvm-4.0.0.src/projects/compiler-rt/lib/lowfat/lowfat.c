@@ -467,13 +467,15 @@ static LOWFAT_NOINLINE const char *lowfat_error_kind(unsigned info)
 }
 
 extern LOWFAT_NORETURN void lowfat_oob_error(unsigned info,
-    const void *ptr, const void *baseptr)
+    void *tptr, void *baseptr)
 {
+    void *ptr = *(void **)tptr;
     const char *kind = lowfat_error_kind(info);
     ssize_t overflow = (ssize_t)ptr - (ssize_t)baseptr;
+    printf("oob error\n");
     if (overflow > 0)
         overflow -= lowfat_size(baseptr);
-    lowfat_error(
+    lowfat_warning(
         "out-of-bounds error detected!\n"
         "\toperation = %s\n"
         "\tpointer   = %p (%s)\n"
@@ -482,6 +484,15 @@ extern LOWFAT_NORETURN void lowfat_oob_error(unsigned info,
         "\t%s = %+zd\n",
         kind, ptr, lowfat_kind(ptr), baseptr, lowfat_size(baseptr),
         (overflow < 0? "underflow": "overflow "), overflow);
+
+    if(overflow < 0) {
+        ptr = baseptr;
+    } else {
+        ptr = lowfat_size(baseptr) + baseptr - 1;
+    }
+    *(void **)tptr = ptr;
+    printf("new pointer: %p\n",ptr);
+
 }
 
 extern void lowfat_oob_warning(unsigned info,
@@ -502,12 +513,13 @@ extern void lowfat_oob_warning(unsigned info,
         (overflow < 0? "underflow": "overflow "), overflow);
 }
 
-extern void lowfat_oob_check(unsigned info, const void *ptr, size_t size0,
-    const void *baseptr)
+extern void lowfat_oob_check(unsigned info, void *ptr, size_t size0,
+    void *baseptr)
 {
     size_t size = lowfat_size(baseptr);
     size_t diff = (size_t)((const uint8_t *)ptr - (const uint8_t *)baseptr);
     size -= size0;
+    printf("test\n");
     if (diff >= size)
         lowfat_oob_error(info, ptr, baseptr);
 }
