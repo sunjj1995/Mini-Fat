@@ -56,7 +56,7 @@ extern "C"
 
 using namespace llvm;
 using namespace std;
-
+static int alloc_num=0;
 /*
  * Type decls.
  */
@@ -1056,6 +1056,14 @@ static void insertBoundsCheck(const DataLayout *DL, Instruction *I, Value *Ptr,
     Value *Size = builder.getInt64(size);
     // 分配一个栈空间并存储对应的ptr信息
     Value *allocPtr = builder.CreateAlloca(Type::getInt64PtrTy(M->getContext()));
+    // create全局变量的写法，并load/store的写法
+    // Value *allocPtr = new GlobalVariable(*M,Type::getInt64PtrTy(M->getContext()),false,GlobalValue::ExternalLinkage,builder.getInt64(0), (M->getModuleIdentifier() + to_string(alloc_num)).c_str());
+    // alloc_num++;
+    // 使用malloc技术分配变量，并load/store的写法
+    // Value *allocFun = M->getOrInsertFunction("lowfat_malloc",
+    //     builder.getInt8PtrTy(), builder.getInt64Ty(), nullptr);
+    // Value *allocPtr = builder.CreateCall(allocFun,{builder.getInt64(8)});
+    // allocPtr = builder.CreateBitCast(allocPtr, Type::getInt64PtrTy(M->getContext()));
     builder.CreateStore(Ptr,allocPtr);
     // 把栈空间的存储ptr值的地址，转成void* 类型，准备传参数
     Value *TPtr = builder.CreateBitCast(allocPtr, builder.getInt8PtrTy());
@@ -1066,12 +1074,13 @@ static void insertBoundsCheck(const DataLayout *DL, Instruction *I, Value *Ptr,
     builder.CreateCall(BoundsCheck,
         {builder.getInt32(info), TPtr, Size, BasePtr});
     // 把修改后的ptr值获取到
-    Ptr = builder.CreateLoad(allocPtr);
+    Ptr = builder.CreateLoad(Type::getInt64PtrTy(M->getContext()),allocPtr);
     // 修改指令，使得访存的地址为饱和地址或者正常地址
     if(dyn_cast<StoreInst>(I) || dyn_cast<LoadInst>(I)) {
-        for (auto OI = I->op_begin(), OE = I->op_end(); OI != OE; ++OI) {     
+        for (auto OI = I->op_end()-1, OE = I->op_begin(); OI >= OE; --OI) {
             if((*OI)->getType()->getTypeID () == 15) {
                 *OI = Ptr;
+                break;
             }
         }
     }
