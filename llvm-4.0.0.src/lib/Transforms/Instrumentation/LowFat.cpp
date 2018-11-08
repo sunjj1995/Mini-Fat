@@ -56,7 +56,7 @@ extern "C"
 
 using namespace llvm;
 using namespace std;
-static int alloc_num=0;
+// static int alloc_num=0;
 /*
  * Type decls.
  */
