@@ -56,7 +56,7 @@ extern "C"
 
 using namespace llvm;
 using namespace std;
-// static int alloc_num=0;
+static int alloc_num=0;
 /*
  * Type decls.
  */
@@ -1055,10 +1055,10 @@ static void insertBoundsCheck(const DataLayout *DL, Instruction *I, Value *Ptr,
     }
     Value *Size = builder.getInt64(size);
     // 分配一个栈空间并存储对应的ptr信息
-    Value *allocPtr = builder.CreateAlloca(Type::getInt64PtrTy(M->getContext()));
+    // Value *allocPtr = builder.CreateAlloca(Type::getInt64PtrTy(M->getContext()));
     // create全局变量的写法，并load/store的写法
-    // Value *allocPtr = new GlobalVariable(*M,Type::getInt64PtrTy(M->getContext()),false,GlobalValue::ExternalLinkage,builder.getInt64(0), (M->getModuleIdentifier() + to_string(alloc_num)).c_str());
-    // alloc_num++;
+    Value *allocPtr = new GlobalVariable(*M,Type::getInt64PtrTy(M->getContext()),false,GlobalValue::ExternalLinkage,builder.getInt64(0), (M->getModuleIdentifier() + to_string(alloc_num)).c_str());
+    alloc_num++;
     // 使用malloc技术分配变量，并load/store的写法
     // Value *allocFun = M->getOrInsertFunction("lowfat_malloc",
     //     builder.getInt8PtrTy(), builder.getInt64Ty(), nullptr);
@@ -1084,6 +1084,11 @@ static void insertBoundsCheck(const DataLayout *DL, Instruction *I, Value *Ptr,
             }
         }
     }
+
+    // Value *freeFun = M->getOrInsertFunction("lowfat_free",
+    //     builder.getVoidTy(), builder.getInt8Ty(), nullptr);
+    // allocPtr = builder.CreateBitCast(allocPtr, Type::getInt8PtrTy(M->getContext()));
+    // builder.CreateCall(freeFun,{allocPtr});
     
 }
 
