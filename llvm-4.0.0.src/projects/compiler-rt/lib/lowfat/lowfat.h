@@ -46,6 +46,38 @@ extern "C"
 #include <lowfat_config.h>
 
 /*
+    under this is Mini-Fat 
+    MiniFat does not need using region to find idx and find it base
+    MiniFat use the first 6 pos to show it size and get the base
+    MiniFat must ensure that every buffer or variable (to buffer also) aligned!
+*/
+#define MINIFAT_MASK (0xFC00000000000000)
+#define MINIFAT_MATCH (0x03FFFFFFFFFFFFFF)
+#define MINIFAT_BASE_SIZE 6
+static inline _LOWFAT_CONST _LOWFAT_INLINE void *minifat_base(const void *_ptr)
+{
+    unsigned long size_base = MINIFAT_MASK & (unsigned long)_ptr;
+    size_base = size_base >> (64 - MINIFAT_BASE_SIZE);
+    unsigned long size = 1 << size_base;
+    unsigned long mask = 0xFFFFFFFFFFFFFFFF << size;
+    return (void *)(mask & (unsigned long)_ptr);
+}
+
+static inline _LOWFAT_CONST _LOWFAT_INLINE size_t minifat_size(const void *_ptr)
+{
+    unsigned long size_base = MINIFAT_MASK & (unsigned long)_ptr;
+    size_base = size_base >> (64 - MINIFAT_BASE_SIZE);
+    unsigned long size = 1 << size_base;
+    return size;
+}
+
+static inline _LOWFAT_CONST _LOWFAT_INLINE size_t minifat_buffer_size(
+    const void *_ptr)
+{
+    return minifat_size(_ptr) -
+        ((const uint8_t *)((unsigned long)_ptr & MINIFAT_MATCH) - (const uint8_t *)minifat_base(_ptr));
+}
+/*
  * Tests if the given pointer is low-fat or not.
  */
 extern _LOWFAT_CONST bool lowfat_is_ptr(const void *_ptr);
@@ -68,8 +100,9 @@ extern _LOWFAT_CONST bool lowfat_is_global_ptr(const void *_ptr);
 /*
  * Return the region index of the given pointer.
  */
-static inline _LOWFAT_INLINE size_t lowfat_index(const void *_ptr)
+static inline _LOWFAT_INLINE size_t lowfat_index(void *_ptr)
 {
+    _ptr = (void*)((unsigned long)_ptr & MINIFAT_MATCH);
     return (uintptr_t)_ptr / _LOWFAT_REGION_SIZE;
 }
 
@@ -78,8 +111,9 @@ static inline _LOWFAT_INLINE size_t lowfat_index(const void *_ptr)
  * from the object's base address.  If the size is unknown then this function
  * returns SIZE_MAX.
  */
-static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_size(const void *_ptr)
+static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_size(void *_ptr)
 {
+    _ptr = (void*)((unsigned long)_ptr & MINIFAT_MATCH);
     size_t _idx = lowfat_index(_ptr);
     return _LOWFAT_SIZES[_idx];
 }
@@ -90,8 +124,9 @@ static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_size(const void *_ptr)
  * objidx = _ptr / lowfat_size(_ptr).  Not implemented in POW2-mode.
  */
 static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_objidx(
-        const void *_ptr)
+        void *_ptr)
 {
+    _ptr = (void*)((unsigned long)_ptr & MINIFAT_MATCH);
     size_t _idx = lowfat_index(_ptr);
     unsigned __int128 _tmp = (unsigned __int128)_LOWFAT_MAGICS[_idx] *
         (unsigned __int128)(uintptr_t)_ptr;
@@ -104,8 +139,9 @@ static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_objidx(
  * Return the base-pointer of the object pointed to by `_ptr'.  If the base
  * pointer is unknown then this functon returns NULL.
  */
-static inline _LOWFAT_CONST _LOWFAT_INLINE void *lowfat_base(const void *_ptr)
+static inline _LOWFAT_CONST _LOWFAT_INLINE void *lowfat_base(void *_ptr)
 {
+    _ptr = (void*)((unsigned long)_ptr & MINIFAT_MATCH);
     size_t _idx = lowfat_index(_ptr);
 #ifndef LOWFAT_IS_POW2
     size_t _objidx = lowfat_objidx(_ptr);
@@ -118,8 +154,9 @@ static inline _LOWFAT_CONST _LOWFAT_INLINE void *lowfat_base(const void *_ptr)
 /*
  * Return the low-fat magic number for `_ptr'.
  */
-static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_magic(const void *_ptr)
+static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_magic(void *_ptr)
 {
+    _ptr = (void*)((unsigned long)_ptr & MINIFAT_MATCH);
     size_t _idx = lowfat_index(_ptr);
     return _LOWFAT_MAGICS[_idx];
 }
@@ -130,8 +167,9 @@ static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_magic(const void *_ptr)
  * (SIZE_MAX - (uintptr_t)_ptr).
  */
 static inline _LOWFAT_CONST _LOWFAT_INLINE size_t lowfat_buffer_size(
-    const void *_ptr)
+    void *_ptr)
 {
+    _ptr = (void*)((unsigned long)_ptr & MINIFAT_MATCH);
     return lowfat_size(_ptr) -
         ((const uint8_t *)(_ptr) - (const uint8_t *)lowfat_base(_ptr));
 }

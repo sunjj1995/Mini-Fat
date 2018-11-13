@@ -190,7 +190,14 @@ extern void *lowfat_malloc_index(size_t idx, size_t size)
 #endif      /* LOWFAT_NO_PROTECT */
     
     lowfat_mutex_unlock(&info->mutex);
-    return ptr;
+    size_t tmp_size = 1;
+    unsigned long base_size = 0;
+    while(tmp_size != alloc_size){
+        tmp_size = tmp_size << 1;
+        base_size++;
+    }
+    base_size = base_size << ((64 - MINIFAT_BASE_SIZE));
+    return (void *)((unsigned long)ptr | base_size);
 }
 
 /*
@@ -204,6 +211,7 @@ extern void lowfat_free(void *ptr)
     {
         // If `ptr' is not low-fat, then it is assumed to from a legacy
         // malloc() allocation.
+        ptr = (unsigned long)ptr & MINIFAT_MATCH;
         lowfat_fallback_free(ptr);
         return;
     }
@@ -216,13 +224,14 @@ extern void lowfat_free(void *ptr)
             "\tpointer = %p (%s)\n"
             "\tbase    = %p\n"
             "\tsize    = %zd\n",
-            kind, ptr, kind, lowfat_base(ptr), lowfat_size(ptr));
+            kind, ptr, kind, /*lowfat_base*/minifat_base(ptr), /*lowfat_size*/minifat_size(ptr));
     }
 
     // It is possible that `ptr' does not point to the object's base (for
     // memalign() type allocations).
-    ptr = lowfat_base(ptr);
+    ptr = /*lowfat_base*/minifat_base(ptr);
 
+    ptr = (unsigned long)ptr & MINIFAT_MATCH;
     size_t idx = lowfat_index(ptr);
     size_t alloc_size = LOWFAT_SIZES[idx];
     if (alloc_size >= LOWFAT_BIG_OBJECT)
@@ -446,11 +455,11 @@ extern void lowfat__ZdaPv(void *ptr) LOWFAT_ALIAS("lowfat_free");
  */
 extern char *lowfat_strdup(const char *str)
 {
-    size_t str_size = lowfat_buffer_size(str);
+    size_t str_size = minifat_buffer_size(str);
     size_t len = strnlen(str, str_size);
     if (len == str_size)
         lowfat_oob_error(LOWFAT_OOB_ERROR_STRDUP, str + str_size,
-            lowfat_base(str));
+            /*lowfat_base*/minifat_base(str));
     char *str2 = (char *)lowfat_malloc(len+1);
     memcpy(str2, str, len+1);
     return str2;
@@ -461,11 +470,11 @@ extern char *lowfat_strdup(const char *str)
  */
 extern char *lowfat_strndup(const char *str, size_t n)
 {
-    size_t str_size = lowfat_buffer_size(str);
+    size_t str_size = minifat_buffer_size(str);
     size_t len = strnlen(str, (n > str_size? str_size: n));
     if (len == str_size)
         lowfat_oob_error(LOWFAT_OOB_ERROR_STRDUP, str + str_size,
-            lowfat_base(str));
+            /*lowfat_base*/minifat_base(str));
     char *str2 = (char *)lowfat_malloc(len+1);
     memcpy(str2, str, len);
     str2[len] = '\0';
@@ -480,7 +489,7 @@ typedef size_t (*malloc_usable_size_t)(void *);
 extern size_t malloc_usable_size(void *ptr)
 {
     if (lowfat_is_ptr(ptr))
-        return lowfat_size(ptr);
+        return /*lowfat_size*/minifat_size(ptr);
     static malloc_usable_size_t libc_malloc_usable_size = NULL;
     if (libc_malloc_usable_size == NULL)
     {

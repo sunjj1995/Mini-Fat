@@ -133,7 +133,7 @@ fi
 
 if [ $# = 0 ]
 then
-    CONFIG="sizes.cfg 32"
+    CONFIG="sizes2.cfg 32"
     echo -e \
         "${GREEN}$0${OFF}: using the default LowFat configuration ($CONFIG)..."
 else

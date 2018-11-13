@@ -172,8 +172,9 @@ LOWFAT_NOINLINE void lowfat_warning(const char *format, ...)
 /*
  * Get pointer kind as a string.
  */
-static LOWFAT_NOINLINE const char *lowfat_kind(const void *ptr)
+static LOWFAT_NOINLINE const char *lowfat_kind(const void *_ptr)
 {
+    void *ptr = (unsigned long)_ptr & MINIFAT_MATCH;
     if (!lowfat_is_ptr(ptr))
         return "nonfat";
     if (lowfat_is_heap_ptr(ptr))
@@ -197,7 +198,7 @@ static LOWFAT_NORETURN void lowfat_segv_handler(int sig, siginfo_t *info,
         "\tpointer = %p (%s)\n"
         "\tbase    = %p\n"
         "\tsize    = %zu",
-        ptr, lowfat_kind(ptr), lowfat_base(ptr), lowfat_size(ptr));
+        ptr, lowfat_kind(ptr), /*lowfat_base*/minifat_base(ptr), /*lowfat_size*/minifat_size(ptr));
 }
 #endif
 
@@ -377,9 +378,13 @@ void LOWFAT_CONSTRUCTOR lowfat_init(void)
 #endif /* LOWFAT_DATA_ONLY */
 }
 
-extern inline size_t lowfat_index(const void *ptr);
-extern inline size_t lowfat_size(const void *ptr);
-extern inline size_t lowfat_buffer_size(const void *ptr);
+extern inline size_t lowfat_index(void *ptr);
+extern inline size_t lowfat_size(void *ptr);
+extern inline size_t lowfat_buffer_size(void *ptr);
+
+extern inline size_t minifat_index(const void *ptr);
+extern inline size_t minifat_size(const void *ptr);
+extern inline size_t minifat_buffer_size(const void *ptr);
 
 static LOWFAT_CONST void *lowfat_region(size_t idx)
 {
@@ -388,6 +393,7 @@ static LOWFAT_CONST void *lowfat_region(size_t idx)
 
 extern LOWFAT_CONST void *lowfat_stack_mirror(void *ptr, ssize_t offset)
 {
+    ptr = (unsigned long)ptr & MINIFAT_MATCH;
     return (void *)((uint8_t *)ptr + offset);
 }
 
@@ -398,6 +404,7 @@ extern LOWFAT_CONST ssize_t lowfat_stack_offset(size_t idx)
 
 extern LOWFAT_CONST void *lowfat_stack_align(void *ptr, size_t idx)
 {
+    ptr = (unsigned long)ptr & MINIFAT_MATCH;
     return (void *)((uintptr_t)ptr & lowfat_stack_masks[idx]);
 }
 
@@ -408,12 +415,14 @@ extern LOWFAT_CONST size_t lowfat_stack_allocsize(size_t idx)
 
 extern LOWFAT_CONST bool lowfat_is_ptr(const void *ptr)
 {
+    ptr = (unsigned long)ptr & MINIFAT_MASK;
     size_t idx = lowfat_index(ptr);
     return (idx - 1) <= LOWFAT_NUM_REGIONS;
 }
 
 extern LOWFAT_CONST bool lowfat_is_stack_ptr(const void *ptr)
 {
+    ptr = (unsigned long)ptr & MINIFAT_MASK;
     size_t idx = lowfat_index(ptr);
     uintptr_t stack_end = (uintptr_t)lowfat_region(idx) +
         LOWFAT_STACK_MEMORY_OFFSET + LOWFAT_STACK_MEMORY_SIZE;
@@ -423,6 +432,7 @@ extern LOWFAT_CONST bool lowfat_is_stack_ptr(const void *ptr)
 
 extern LOWFAT_CONST bool lowfat_is_global_ptr(const void *ptr)
 {
+    ptr = (unsigned long)ptr & MINIFAT_MASK;
     size_t idx = lowfat_index(ptr);
     uintptr_t global_end = (uintptr_t)lowfat_region(idx) +
         LOWFAT_GLOBAL_MEMORY_OFFSET + LOWFAT_GLOBAL_MEMORY_SIZE;
@@ -432,6 +442,7 @@ extern LOWFAT_CONST bool lowfat_is_global_ptr(const void *ptr)
 
 extern LOWFAT_CONST bool lowfat_is_heap_ptr(const void *ptr)
 {
+    ptr = (unsigned long)ptr & MINIFAT_MASK;
     size_t idx = lowfat_index(ptr);
     uintptr_t heap_end = (uintptr_t)lowfat_region(idx) +
         LOWFAT_HEAP_MEMORY_OFFSET + LOWFAT_HEAP_MEMORY_SIZE;
@@ -469,10 +480,12 @@ static LOWFAT_NOINLINE const char *lowfat_error_kind(unsigned info)
 extern LOWFAT_NORETURN void lowfat_oob_error(unsigned info,
     const void *ptr, const void *baseptr)
 {
+    // printf("%p %p\n",ptr,baseptr);
+    // printf("%s\n",lowfat_kind(ptr));
     const char *kind = lowfat_error_kind(info);
-    ssize_t overflow = (ssize_t)ptr - (ssize_t)baseptr;
+    ssize_t overflow = (ssize_t)((unsigned long)ptr & MINIFAT_MATCH) - (ssize_t)((unsigned long)baseptr & MINIFAT_MATCH);
     if (overflow > 0)
-        overflow -= lowfat_size(baseptr);
+        overflow -= /*lowfat_size*/minifat_size(baseptr);
     lowfat_error(
         "out-of-bounds error detected!\n"
         "\toperation = %s\n"
@@ -480,7 +493,7 @@ extern LOWFAT_NORETURN void lowfat_oob_error(unsigned info,
         "\tbase      = %p\n"
         "\tsize      = %zu\n"
         "\t%s = %+zd\n",
-        kind, ptr, lowfat_kind(ptr), baseptr, lowfat_size(baseptr),
+        kind, ptr, lowfat_kind(ptr), baseptr, /*lowfat_size*/minifat_size(baseptr),
         (overflow < 0? "underflow": "overflow "), overflow);
 }
 
@@ -488,9 +501,9 @@ extern void lowfat_oob_warning(unsigned info,
     const void *ptr, const void *baseptr)
 {
     const char *kind = lowfat_error_kind(info);
-    ssize_t overflow = (ssize_t)ptr - (ssize_t)baseptr;
+    ssize_t overflow = (ssize_t)((unsigned long)ptr & MINIFAT_MATCH) - (ssize_t)((unsigned long)baseptr & MINIFAT_MATCH);
     if (overflow > 0)
-        overflow -= lowfat_size(baseptr);
+        overflow -= /*lowfat_size*/minifat_size(baseptr);
     lowfat_warning(
         "out-of-bounds error detected!\n"
         "\toperation = %s\n"
@@ -498,14 +511,14 @@ extern void lowfat_oob_warning(unsigned info,
         "\tbase      = %p\n"
         "\tsize      = %zu\n"
         "\t%s = %+zd\n",
-        kind, ptr, lowfat_kind(ptr), baseptr, lowfat_size(baseptr),
+        kind, ptr, lowfat_kind(ptr), baseptr, /*lowfat_size*/minifat_size(baseptr),
         (overflow < 0? "underflow": "overflow "), overflow);
 }
 
 extern void lowfat_oob_check(unsigned info, const void *ptr, size_t size0,
     const void *baseptr)
 {
-    size_t size = lowfat_size(baseptr);
+    size_t size = /*lowfat_size*/minifat_size(baseptr);
     size_t diff = (size_t)((const uint8_t *)ptr - (const uint8_t *)baseptr);
     size -= size0;
     if (diff >= size)
@@ -600,5 +613,16 @@ __attribute__((section(".preinit_array"), used))
 void (*__local_effective_preinit)(int argc, char **argv, char **envp) =
 	lowfat_preinit;
 
+extern LOWFAT_CONST void* minifat_pointer_package(void *ptr, ssize_t size)
+{
+    size_t tmp_size = 1;
+    unsigned long base_size = 0;
+    while(tmp_size != size){
+        tmp_size = tmp_size << 1;
+        base_size++;
+    }
+    base_size = base_size << ((64 - MINIFAT_BASE_SIZE));
+    return (void *)((unsigned long)ptr | base_size);
+}
 #endif
 
