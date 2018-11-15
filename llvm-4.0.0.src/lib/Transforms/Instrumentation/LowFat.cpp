@@ -1179,8 +1179,8 @@ static void addLowFatFuncs(Module *M)
     if (F != nullptr)
     {
         BasicBlock *Entry = BasicBlock::Create(M->getContext(), "", F);
-        BasicBlock *Stack  = BasicBlock::Create(M->getContext(), "", F);
-        BasicBlock *Heap = BasicBlock::Create(M->getContext(), "", F);
+        // BasicBlock *Stack  = BasicBlock::Create(M->getContext(), "", F);
+        // BasicBlock *Heap = BasicBlock::Create(M->getContext(), "", F);
         IRBuilder<> builder(Entry);
 
         Value *Ptr = &F->getArgumentList().front();
@@ -1269,11 +1269,12 @@ static void addLowFatFuncs(Module *M)
         // Value *SizePtr = builder.CreateGEP(Sizes, Idx);
         // Value *Size = builder.CreateAlignedLoad(SizePtr, sizeof(size_t));
 
-        // 添加我们的size获取方式
-        Ptr = builder.CreateBitCast(Ptr, builder.getInt64Ty());
-        Value *size_base = builder.CreateAnd(Ptr,0xFC00000000000000);
+        // 添加我们的size获取方式 计算size是必须根据baseptr计算，新ptr不计算
+        BasePtr = builder.CreateBitCast(BasePtr, builder.getInt64Ty());
+        Value *size_base = builder.CreateAnd(BasePtr,0xFC00000000000000);
         size_base = builder.CreateLShr(size_base,58);
         Value *Size = builder.CreateShl(builder.getInt64(1),size_base);
+        BasePtr = builder.CreateBitCast(BasePtr, builder.getInt8PtrTy());
         
         // The check is: if (ptr - base > size - sizeof(*ptr)) error();
         Value *IPtr = builder.CreatePtrToInt(Ptr, builder.getInt64Ty());
@@ -1599,34 +1600,122 @@ static void makeAllocaLowFatPtr(Module *M, Instruction *I)
     Value *LifetimeSize = nullptr;
     bool delAlloca = false;
     size_t newSize;
-    if (ISize != nullptr)
-    {
-        // Simple+common case: fixed sized alloca:
+//     if (ISize != nullptr)
+//     {
+//         // Simple+common case: fixed sized alloca:
+//         size_t size = DL->getTypeAllocSize(Ty) * ISize->getZExtValue();
+
+//         // STEP (1): Align the stack:
+//         size_t idx = clzll(size);
+//         if (idx <= clzll(LOWFAT_MAX_STACK_ALLOC_SIZE))
+//         {
+//             Alloca->dump();
+//             Alloca->getContext().diagnose(LowFatWarning(
+//                 "Stack allocation cannot be made low-fat (too big)"));
+//             return;
+//         }
+//         ssize_t offset = lowfat_stack_offsets[idx];
+//         size_t align = ~lowfat_stack_masks[idx] + 1;
+//         if (align > Alloca->getAlignment())
+//             Alloca->setAlignment(align);
+
+//         // STEP (2): Adjust the allocation size:
+//         newSize = lowfat_stack_sizes[idx];
+//         if (newSize != size)
+//         {
+//             /*
+//              * LLVM doubles the allocSz when the object is allocSz-aligned for
+//              * some reason (gcc does not seem to do this).  This wastes space
+//              * but it does not seem there is anything we can do about it.
+//              */
+//             LifetimeSize = builder.getInt64(newSize);
+//             AllocaInst *NewAlloca = builder.CreateAlloca(
+//                 builder.getInt8Ty(), LifetimeSize);
+//             NewAlloca->setAlignment(Alloca->getAlignment());
+//             AllocedPtr = NewAlloca;
+//             delAlloca = true;
+//         }
+//         else
+//             AllocedPtr = builder.CreateBitCast(Alloca, builder.getInt8PtrTy());
+//         Offset = builder.getInt64(offset);
+//         CastAlloca = AllocedPtr;
+//         NoReplace1 = AllocedPtr;
+//     }
+//     else
+//     {
+// #ifdef LOWFAT_LEGACY
+//         // VLAs are disabled for LEGACY mode due to the alloca(0) problem.
+//         return;
+// #else
+//         // Complex+hard case: variable length stack object (e.g. VLAs)
+//         delAlloca = true;
+
+//         // STEP (1): Get the index/offset:
+//         Size = builder.CreateMul(builder.getInt64(DL->getTypeAllocSize(Ty)),
+//             Size);
+//         Constant *C = M->getOrInsertFunction("llvm.ctlz.i64",
+//             builder.getInt64Ty(), builder.getInt64Ty(), builder.getInt1Ty(),
+//             nullptr);
+//         Idx = builder.CreateCall(C, {Size, builder.getInt1(true)});
+//         if (CallInst *Call = dyn_cast<CallInst>(Idx))
+//             Call->setTailCall(true);
+//         C = M->getOrInsertFunction("lowfat_stack_offset",
+//             builder.getInt64Ty(), builder.getInt64Ty(), nullptr);
+//         Offset = builder.CreateCall(C, {Idx});
+//         if (CallInst *Call = dyn_cast<CallInst>(Offset))
+//             Call->setTailCall(true);
+
+//         // STEP (2): Get the actual allocation size:
+//         C = M->getOrInsertFunction("lowfat_stack_allocsize",
+//             builder.getInt64Ty(), builder.getInt64Ty(), nullptr);
+//         Size = builder.CreateCall(C, {Idx});
+//         if (CallInst *Call = dyn_cast<CallInst>(Size))
+//             Call->setTailCall(true);
+
+//         // STEP (3): Create replacement alloca():
+//         CastAlloca = builder.CreateAlloca(builder.getInt8Ty(), Size);
+//         Value *SP = CastAlloca;     // SP = Stack pointer
+
+//         // STEP (4): Align the stack:
+//         C = M->getOrInsertFunction("lowfat_stack_align",
+//             builder.getInt8PtrTy(), builder.getInt8PtrTy(),
+//             builder.getInt64Ty(), nullptr);
+//         SP = builder.CreateCall(C, {SP, Idx});
+//         NoReplace1 = SP;
+//         if (CallInst *Call = dyn_cast<CallInst>(SP))
+//             Call->setTailCall(true);
+
+//         // STEP (5): Save the adjusted stack pointer:
+//         C = M->getOrInsertFunction("llvm.stackrestore",
+//             builder.getVoidTy(), builder.getInt8PtrTy(), nullptr);
+//         Value *_ = builder.CreateCall(C, {SP});
+//         if (CallInst *Call = dyn_cast<CallInst>(_))
+//             Call->setTailCall(true);
+
+//         AllocedPtr = SP;
+// #endif
+//     }
+
+//     // STEP (3)/(6): Mirror the pointer into a low-fat region:
+//     Value *C = M->getOrInsertFunction("lowfat_stack_mirror",
+//         builder.getInt8PtrTy(), builder.getInt8PtrTy(), builder.getInt64Ty(),
+//         nullptr);
+//     Value *MirroredPtr = builder.CreateCall(C, {AllocedPtr, Offset});
+//     NoReplace2 = MirroredPtr;
+//     Value *Ptr = builder.CreateBitCast(MirroredPtr, Alloca->getType());
+//     Ptr = builder.CreateBitCast(Ptr, builder.getInt8PtrTy());
+
+    // minifat pointer的组织形式
+    if(ISize != nullptr) {
         size_t size = DL->getTypeAllocSize(Ty) * ISize->getZExtValue();
-        
-        // STEP (1): Align the stack:
-        size_t idx = clzll(size);
-        if (idx <= clzll(LOWFAT_MAX_STACK_ALLOC_SIZE))
-        {
-            Alloca->dump();
-            Alloca->getContext().diagnose(LowFatWarning(
-                "Stack allocation cannot be made low-fat (too big)"));
-            return;
-        }
-        ssize_t offset = lowfat_stack_offsets[idx];
-        size_t align = ~lowfat_stack_masks[idx] + 1;
+        newSize = 1 << (64 - clzll(size));
+
+        size_t align = newSize;
         if (align > Alloca->getAlignment())
             Alloca->setAlignment(align);
 
-        // STEP (2): Adjust the allocation size:
-        newSize = lowfat_stack_sizes[idx];
         if (newSize != size)
         {
-            /*
-             * LLVM doubles the allocSz when the object is allocSz-aligned for
-             * some reason (gcc does not seem to do this).  This wastes space
-             * but it does not seem there is anything we can do about it.
-             */
             LifetimeSize = builder.getInt64(newSize);
             AllocaInst *NewAlloca = builder.CreateAlloca(
                 builder.getInt8Ty(), LifetimeSize);
@@ -1636,53 +1725,33 @@ static void makeAllocaLowFatPtr(Module *M, Instruction *I)
         }
         else
             AllocedPtr = builder.CreateBitCast(Alloca, builder.getInt8PtrTy());
-        Offset = builder.getInt64(offset);
         CastAlloca = AllocedPtr;
         NoReplace1 = AllocedPtr;
-    }
-    else
-    {
-#ifdef LOWFAT_LEGACY
-        // VLAs are disabled for LEGACY mode due to the alloca(0) problem.
-        return;
-#else
-        // Complex+hard case: variable length stack object (e.g. VLAs)
+    } else {
         delAlloca = true;
 
-        // STEP (1): Get the index/offset:
         Size = builder.CreateMul(builder.getInt64(DL->getTypeAllocSize(Ty)),
             Size);
         Constant *C = M->getOrInsertFunction("llvm.ctlz.i64",
             builder.getInt64Ty(), builder.getInt64Ty(), builder.getInt1Ty(),
             nullptr);
-        Idx = builder.CreateCall(C, {Size, builder.getInt1(true)});
-        if (CallInst *Call = dyn_cast<CallInst>(Idx))
+       
+        Value *zero_num = builder.CreateCall(C, {Size, builder.getInt1(true)});
+        if (CallInst *Call = dyn_cast<CallInst>(zero_num))
             Call->setTailCall(true);
-        C = M->getOrInsertFunction("lowfat_stack_offset",
-            builder.getInt64Ty(), builder.getInt64Ty(), nullptr);
-        Offset = builder.CreateCall(C, {Idx});
-        if (CallInst *Call = dyn_cast<CallInst>(Offset))
-            Call->setTailCall(true);
-
         // STEP (2): Get the actual allocation size:
-        C = M->getOrInsertFunction("lowfat_stack_allocsize",
-            builder.getInt64Ty(), builder.getInt64Ty(), nullptr);
-        Size = builder.CreateCall(C, {Idx});
-        if (CallInst *Call = dyn_cast<CallInst>(Size))
-            Call->setTailCall(true);
+        Value *base = builder.CreateSub(builder.getInt64(64),zero_num);
+        Size = builder.CreateShl(builder.getInt64(1),base);
 
         // STEP (3): Create replacement alloca():
         CastAlloca = builder.CreateAlloca(builder.getInt8Ty(), Size);
         Value *SP = CastAlloca;     // SP = Stack pointer
 
-        // STEP (4): Align the stack:
-        C = M->getOrInsertFunction("lowfat_stack_align",
-            builder.getInt8PtrTy(), builder.getInt8PtrTy(),
-            builder.getInt64Ty(), nullptr);
-        SP = builder.CreateCall(C, {SP, Idx});
+         // STEP (4): Align the stack:
+        Value *SPD = builder.CreateBitCast(SP,builder.getInt64Ty());
+        SPD = builder.CreateAnd(SPD,Size);
+        SP = builder.CreateBitCast(SPD, SP->getType ());
         NoReplace1 = SP;
-        if (CallInst *Call = dyn_cast<CallInst>(SP))
-            Call->setTailCall(true);
 
         // STEP (5): Save the adjusted stack pointer:
         C = M->getOrInsertFunction("llvm.stackrestore",
@@ -1692,19 +1761,10 @@ static void makeAllocaLowFatPtr(Module *M, Instruction *I)
             Call->setTailCall(true);
 
         AllocedPtr = SP;
-#endif
     }
 
-    // STEP (3)/(6): Mirror the pointer into a low-fat region:
-    Value *C = M->getOrInsertFunction("lowfat_stack_mirror",
-        builder.getInt8PtrTy(), builder.getInt8PtrTy(), builder.getInt64Ty(),
-        nullptr);
-    Value *MirroredPtr = builder.CreateCall(C, {AllocedPtr, Offset});
-    NoReplace2 = MirroredPtr;
-    Value *Ptr = builder.CreateBitCast(MirroredPtr, Alloca->getType());
-
     // 在给每一个用户之前，把他变成minifat-pointer
-    Ptr = builder.CreateBitCast(MirroredPtr, builder.getInt8PtrTy());
+    Value *Ptr = builder.CreateBitCast(AllocedPtr, builder.getInt8PtrTy());
     Value *package = M->getOrInsertFunction("minifat_pointer_package",
         builder.getInt8PtrTy(), builder.getInt8PtrTy(), builder.getInt64Ty(),
         nullptr);
