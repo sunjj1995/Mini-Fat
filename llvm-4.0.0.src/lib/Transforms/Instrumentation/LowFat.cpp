@@ -1576,6 +1576,10 @@ static void makeGlobalVariableLowFatPtr(Module *M, GlobalVariable *GV)
  * complicated transformation described in the paper:
  * "Stack Bounds Protection with Low Fat Pointers", in NDSS 2017.
  */
+ /*
+ * minifat pointer does not need the stack mirror to the heap
+ * but needs align and size as 2^n
+ */
 static void makeAllocaLowFatPtr(Module *M, Instruction *I)
 {
     AllocaInst *Alloca = dyn_cast<AllocaInst>(I);
@@ -1866,18 +1870,18 @@ struct LowFat : public ModulePass
         // PASS (3): Add function definitions
         addLowFatFuncs(&M);
 
-        // PASS (4): Optimize lowfat_malloc() calls
-        // for (auto &F: M)
-        // {
-        //     if (F.isDeclaration())
-        //         continue;
-        //     vector<Instruction *> dels;
-        //     for (auto &BB: F)
-        //         for (auto &I: BB)
-        //             optimizeMalloc(&M, &I, dels);
-        //     for (auto &I: dels)
-        //         I->eraseFromParent();
-        // }
+        PASS (4): Optimize lowfat_malloc() calls
+        for (auto &F: M)
+        {
+            if (F.isDeclaration())
+                continue;
+            vector<Instruction *> dels;
+            for (auto &BB: F)
+                for (auto &I: BB)
+                    optimizeMalloc(&M, &I, dels);
+            for (auto &I: dels)
+                I->eraseFromParent();
+        }
 
         if (option_debug)
         {
