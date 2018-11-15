@@ -1870,7 +1870,7 @@ struct LowFat : public ModulePass
         // PASS (3): Add function definitions
         addLowFatFuncs(&M);
 
-        PASS (4): Optimize lowfat_malloc() calls
+        // PASS (4): Optimize lowfat_malloc() calls
         for (auto &F: M)
         {
             if (F.isDeclaration())
