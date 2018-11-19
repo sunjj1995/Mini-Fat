@@ -1186,11 +1186,12 @@ static void addLowFatFuncs(Module *M)
         Value *Ptr = &F->getArgumentList().front();
         Ptr = builder.CreateBitCast(Ptr, builder.getInt64Ty());
         Value *size_base = builder.CreateAnd(Ptr,0xFC00000000000000);
-        size_base = builder.CreateAShr(size_base,58);
-        Value *size = builder.CreateLShr(builder.getInt64(1),size_base);
+        size_base = builder.CreateLShr(size_base,58);
+        Value *size = builder.CreateShl(builder.getInt64(1),size_base);
 
-        Value *mask = builder.CreateLShr(builder.getInt64(0xFFFFFFFFFFFFFFFF),size);
-        Value *BasePtr = builder.CreateAnd(mask,Ptr);
+        // Value *mask = builder.CreateShl(builder.getInt64(0xFFFFFFFFFFFFFFFF),size);
+        Value *BasePtr = builder.CreateAnd(size,Ptr);
+        BasePtr = builder.CreateBitCast(BasePtr,builder.getInt8PtrTy());
         builder.CreateRet(BasePtr);
         
         // 特定时期的某个中间版本，已经不需要
@@ -1232,7 +1233,7 @@ static void addLowFatFuncs(Module *M)
 //         Value *BasePtr2 = builder3.CreateAnd(mask,Ptr);
 //         builder3.CreateRet(BasePtr2);
  
-        // F->setOnlyReadsMemory();
+        F->setOnlyReadsMemory();
         F->setDoesNotThrow();
         F->setLinkage(GlobalValue::InternalLinkage);
         F->addFnAttr(llvm::Attribute::AlwaysInline);
