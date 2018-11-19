@@ -1932,17 +1932,17 @@ struct LowFat : public ModulePass
         addLowFatFuncs(&M);
 
         // PASS (4): Optimize lowfat_malloc() calls
-        for (auto &F: M)
-        {
-            if (F.isDeclaration())
-                continue;
-            vector<Instruction *> dels;
-            for (auto &BB: F)
-                for (auto &I: BB)
-                    optimizeMalloc(&M, &I, dels);
-            for (auto &I: dels)
-                I->eraseFromParent();
-        }
+        // for (auto &F: M)
+        // {
+        //     if (F.isDeclaration())
+        //         continue;
+        //     vector<Instruction *> dels;
+        //     for (auto &BB: F)
+        //         for (auto &I: BB)
+        //             optimizeMalloc(&M, &I, dels);
+        //     for (auto &I: dels)
+        //         I->eraseFromParent();
+        // }
 
         if (option_debug)
         {

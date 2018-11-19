@@ -205,178 +205,178 @@ static LOWFAT_NORETURN void lowfat_segv_handler(int sig, siginfo_t *info,
 /*
  * Setup the LOWFAT environment.
  */
-void LOWFAT_CONSTRUCTOR lowfat_init(void)
-{
-    static bool lowfat_inited = false;
-    if (lowfat_inited)
-        return;
-    lowfat_inited = true;
+// void LOWFAT_CONSTRUCTOR lowfat_init(void)
+// {
+//     static bool lowfat_inited = false;
+//     if (lowfat_inited)
+//         return;
+//     lowfat_inited = true;
 
-    lowfat_mutex_init(&lowfat_print_mutex);
+//     lowfat_mutex_init(&lowfat_print_mutex);
 
-    // Basic sanity checks:
-    if (sizeof(void *) != sizeof(uint64_t))
-        lowfat_error("incompatible architecture (not x86-64)");
-#if !defined(LOWFAT_WINDOWS)
-    if (sysconf(_SC_PAGESIZE) != LOWFAT_PAGE_SIZE)
-        lowfat_error("incompatible system page size (expected %u; got %ld)",
-            LOWFAT_PAGE_SIZE, sysconf(_SC_PAGESIZE));
-#endif
-#if !defined(LOWFAT_LEGACY)
-    uint32_t eax, ebx, ecx, edx;
-    LOWFAT_CPUID(7, 0, eax, ebx, ecx, edx);
-    if (((ebx >> 3) & 1) == 0 || ((ebx >> 8) & 1) == 0)
-        lowfat_error("incompatible architecture (no BMI/BMI2 support)");
-#endif
+//     // Basic sanity checks:
+//     if (sizeof(void *) != sizeof(uint64_t))
+//         lowfat_error("incompatible architecture (not x86-64)");
+// #if !defined(LOWFAT_WINDOWS)
+//     if (sysconf(_SC_PAGESIZE) != LOWFAT_PAGE_SIZE)
+//         lowfat_error("incompatible system page size (expected %u; got %ld)",
+//             LOWFAT_PAGE_SIZE, sysconf(_SC_PAGESIZE));
+// #endif
+// #if !defined(LOWFAT_LEGACY)
+//     uint32_t eax, ebx, ecx, edx;
+//     LOWFAT_CPUID(7, 0, eax, ebx, ecx, edx);
+//     if (((ebx >> 3) & 1) == 0 || ((ebx >> 8) & 1) == 0)
+//         lowfat_error("incompatible architecture (no BMI/BMI2 support)");
+// #endif
  
-    // Random seed memory:
-    lowfat_seed = (uint8_t *)lowfat_map(NULL, LOWFAT_PAGE_SIZE, true, true, -1);
-    if (lowfat_seed == NULL)
-        lowfat_error("failed to allocate random seed: %s", strerror(errno));
+//     // Random seed memory:
+//     lowfat_seed = (uint8_t *)lowfat_map(NULL, LOWFAT_PAGE_SIZE, true, true, -1);
+//     if (lowfat_seed == NULL)
+//         lowfat_error("failed to allocate random seed: %s", strerror(errno));
 
-    // Init LOWFAT_SIZES and LOWFAT_MAGICS
-    {
-        // Create LOWFAT_SIZES:
-        size_t total_pages = (LOWFAT_MAX_ADDRESS / LOWFAT_REGION_SIZE) /
-            (LOWFAT_PAGE_SIZE / sizeof(size_t));
-        size_t len = total_pages * LOWFAT_PAGE_SIZE;
-        void *ptr = lowfat_map((void *)LOWFAT_SIZES, len, true, true, -1);
-        if (ptr != (void *)LOWFAT_SIZES)
-        {
-            mmap_error:
-            lowfat_error("failed to mmap memory: %s", strerror(errno));
-        }
+//     // Init LOWFAT_SIZES and LOWFAT_MAGICS
+//     {
+//         // Create LOWFAT_SIZES:
+//         size_t total_pages = (LOWFAT_MAX_ADDRESS / LOWFAT_REGION_SIZE) /
+//             (LOWFAT_PAGE_SIZE / sizeof(size_t));
+//         size_t len = total_pages * LOWFAT_PAGE_SIZE;
+//         void *ptr = lowfat_map((void *)LOWFAT_SIZES, len, true, true, -1);
+//         if (ptr != (void *)LOWFAT_SIZES)
+//         {
+//             mmap_error:
+//             lowfat_error("failed to mmap memory: %s", strerror(errno));
+//         }
 
-#if !defined(LOWFAT_WINDOWS)
-        int fd = lowfat_create_shm(LOWFAT_PAGE_SIZE);
-        void *start = (uint8_t *)LOWFAT_SIZES +
-            LOWFAT_SIZES_PAGES * LOWFAT_PAGE_SIZE;
-        void *end = (uint8_t *)LOWFAT_SIZES + total_pages * LOWFAT_PAGE_SIZE;
-        bool w = true;
-        while (start < end)
-        {
-            ptr = lowfat_map(start, LOWFAT_PAGE_SIZE, true, w, fd);
-            if (ptr != start)
-                goto mmap_error;
-            start = (uint8_t *)start + LOWFAT_PAGE_SIZE;
-            w = false;
-        }
-        if (close(fd) < 0)
-        {
-            close_error:
-            lowfat_error("failed to close object: %s", strerror(errno));
-        }
-        size_t size_init_len = LOWFAT_PAGE_SIZE;
-#else
-        size_t size_init_len =
-            (total_pages - LOWFAT_SIZES_PAGES) * LOWFAT_PAGE_SIZE;
-#endif
+// #if !defined(LOWFAT_WINDOWS)
+//         int fd = lowfat_create_shm(LOWFAT_PAGE_SIZE);
+//         void *start = (uint8_t *)LOWFAT_SIZES +
+//             LOWFAT_SIZES_PAGES * LOWFAT_PAGE_SIZE;
+//         void *end = (uint8_t *)LOWFAT_SIZES + total_pages * LOWFAT_PAGE_SIZE;
+//         bool w = true;
+//         while (start < end)
+//         {
+//             ptr = lowfat_map(start, LOWFAT_PAGE_SIZE, true, w, fd);
+//             if (ptr != start)
+//                 goto mmap_error;
+//             start = (uint8_t *)start + LOWFAT_PAGE_SIZE;
+//             w = false;
+//         }
+//         if (close(fd) < 0)
+//         {
+//             close_error:
+//             lowfat_error("failed to close object: %s", strerror(errno));
+//         }
+//         size_t size_init_len = LOWFAT_PAGE_SIZE;
+// #else
+//         size_t size_init_len =
+//             (total_pages - LOWFAT_SIZES_PAGES) * LOWFAT_PAGE_SIZE;
+// #endif
 
-        // Create LOWFAT_MAGICS:
-        ptr = lowfat_map((void *)LOWFAT_MAGICS, len, true, true, -1);
-        if (ptr != (void *)LOWFAT_MAGICS)
-            goto mmap_error;
+//         // Create LOWFAT_MAGICS:
+//         ptr = lowfat_map((void *)LOWFAT_MAGICS, len, true, true, -1);
+//         if (ptr != (void *)LOWFAT_MAGICS)
+//             goto mmap_error;
 
-        // Init LOWFAT_SIZES and LOWFAT_MAGICS data:
-        size_t i = 0;
-        LOWFAT_SIZES[i++] = SIZE_MAX;
-        size_t sizes_len = sizeof(lowfat_sizes) / sizeof(lowfat_sizes[0]);
-        for (size_t j = 0; j < sizes_len; j++)
-            LOWFAT_SIZES[i++] = lowfat_sizes[j];
-        while (((uintptr_t)(LOWFAT_SIZES + i) % LOWFAT_PAGE_SIZE) != 0)
-            LOWFAT_SIZES[i++] = SIZE_MAX;
-        for (size_t j = 0; j < size_init_len / sizeof(size_t); j++)
-            LOWFAT_SIZES[i++] = SIZE_MAX;
-        i = 0;
-        LOWFAT_MAGICS[i++] = 0;
-        for (size_t j = 0; j < sizes_len; j++)
-            LOWFAT_MAGICS[i++] = lowfat_magics[j];
-        while (((uintptr_t)(LOWFAT_MAGICS + i) % LOWFAT_PAGE_SIZE) != 0)
-            LOWFAT_MAGICS[i++] = 0;
+//         // Init LOWFAT_SIZES and LOWFAT_MAGICS data:
+//         size_t i = 0;
+//         LOWFAT_SIZES[i++] = SIZE_MAX;
+//         size_t sizes_len = sizeof(lowfat_sizes) / sizeof(lowfat_sizes[0]);
+//         for (size_t j = 0; j < sizes_len; j++)
+//             LOWFAT_SIZES[i++] = lowfat_sizes[j];
+//         while (((uintptr_t)(LOWFAT_SIZES + i) % LOWFAT_PAGE_SIZE) != 0)
+//             LOWFAT_SIZES[i++] = SIZE_MAX;
+//         for (size_t j = 0; j < size_init_len / sizeof(size_t); j++)
+//             LOWFAT_SIZES[i++] = SIZE_MAX;
+//         i = 0;
+//         LOWFAT_MAGICS[i++] = 0;
+//         for (size_t j = 0; j < sizes_len; j++)
+//             LOWFAT_MAGICS[i++] = lowfat_magics[j];
+//         while (((uintptr_t)(LOWFAT_MAGICS + i) % LOWFAT_PAGE_SIZE) != 0)
+//             LOWFAT_MAGICS[i++] = 0;
 
-        if (!lowfat_protect((void *)LOWFAT_SIZES, len, true, false) ||
-            !lowfat_protect((void *)LOWFAT_MAGICS, len, true, false))
-            lowfat_error("failed to write protect memory: %s",
-                strerror(errno));
-    }
+//         if (!lowfat_protect((void *)LOWFAT_SIZES, len, true, false) ||
+//             !lowfat_protect((void *)LOWFAT_MAGICS, len, true, false))
+//             lowfat_error("failed to write protect memory: %s",
+//                 strerror(errno));
+//     }
 
-#ifndef LOWFAT_DATA_ONLY
+// #ifndef LOWFAT_DATA_ONLY
 
-    // Init regions for lowfat_malloc()
-    for (size_t i = 1; i <= LOWFAT_NUM_REGIONS; i++)
-    {
-        void *heap_start = (uint8_t *)lowfat_region(i) +
-            LOWFAT_HEAP_MEMORY_OFFSET;
-        void *ptr = lowfat_map(heap_start, LOWFAT_HEAP_MEMORY_SIZE, false,
-            false, -1);
-        if (ptr != heap_start)
-            goto mmap_error;
-    }
+//     // Init regions for lowfat_malloc()
+//     for (size_t i = 1; i <= LOWFAT_NUM_REGIONS; i++)
+//     {
+//         void *heap_start = (uint8_t *)lowfat_region(i) +
+//             LOWFAT_HEAP_MEMORY_OFFSET;
+//         void *ptr = lowfat_map(heap_start, LOWFAT_HEAP_MEMORY_SIZE, false,
+//             false, -1);
+//         if (ptr != heap_start)
+//             goto mmap_error;
+//     }
 
-    // Initialize malloc()
-    if (!lowfat_malloc_init())
-        lowfat_error("failed to initialize lowfat malloc(): %s",
-            strerror(errno));
-    lowfat_malloc_inited = true;
+//     // Initialize malloc()
+//     if (!lowfat_malloc_init())
+//         lowfat_error("failed to initialize lowfat malloc(): %s",
+//             strerror(errno));
+//     lowfat_malloc_inited = true;
 
-#if !defined(LOWFAT_STANDALONE) && !defined(LOWFAT_WINDOWS)
+// #if !defined(LOWFAT_STANDALONE) && !defined(LOWFAT_WINDOWS)
 
-    // Init regions for the stack
-#ifndef LOWFAT_NO_MEMORY_ALIAS
-    {
-        int fd = lowfat_create_shm(LOWFAT_STACK_MEMORY_SIZE);
-        size_t idx;
-        for (size_t i = 0; (idx = lowfat_stacks[i]) != 0; i++)
-        {
-            void *stack_start = (uint8_t *)lowfat_region(idx) +
-                LOWFAT_STACK_MEMORY_OFFSET;
-            void *ptr = lowfat_map(stack_start, LOWFAT_STACK_MEMORY_SIZE,
-                false, false, fd);
-            if (ptr != stack_start)
-                goto mmap_error;
-        }
-        if (close(fd) < 0)
-            goto close_error;
-    }
-#else
-    size_t idx;
-    for (size_t i = 0; (idx = lowfat_stacks[i]) != 0; i++)
-    {
-        void *stack_start = (uint8_t *)lowfat_region(idx) +
-            LOWFAT_STACK_MEMORY_OFFSET;
-        void *ptr = lowfat_map(stack_start, LOWFAT_STACK_MEMORY_SIZE, false,
-            false, -1);
-        if (ptr != stack_start)
-            goto mmap_error;
-    }
-#endif /* LOWFAT_NO_MEMORY_ALIAS */
+//     // Init regions for the stack
+// #ifndef LOWFAT_NO_MEMORY_ALIAS
+//     {
+//         int fd = lowfat_create_shm(LOWFAT_STACK_MEMORY_SIZE);
+//         size_t idx;
+//         for (size_t i = 0; (idx = lowfat_stacks[i]) != 0; i++)
+//         {
+//             void *stack_start = (uint8_t *)lowfat_region(idx) +
+//                 LOWFAT_STACK_MEMORY_OFFSET;
+//             void *ptr = lowfat_map(stack_start, LOWFAT_STACK_MEMORY_SIZE,
+//                 false, false, fd);
+//             if (ptr != stack_start)
+//                 goto mmap_error;
+//         }
+//         if (close(fd) < 0)
+//             goto close_error;
+//     }
+// #else
+//     size_t idx;
+//     for (size_t i = 0; (idx = lowfat_stacks[i]) != 0; i++)
+//     {
+//         void *stack_start = (uint8_t *)lowfat_region(idx) +
+//             LOWFAT_STACK_MEMORY_OFFSET;
+//         void *ptr = lowfat_map(stack_start, LOWFAT_STACK_MEMORY_SIZE, false,
+//             false, -1);
+//         if (ptr != stack_start)
+//             goto mmap_error;
+//     }
+// #endif /* LOWFAT_NO_MEMORY_ALIAS */
 
-    // Initialize multi-threading
-    if (!lowfat_threads_init())
-        lowfat_error("failed to initialize lowfat threads: %s",
-            strerror(errno));
+//     // Initialize multi-threading
+//     if (!lowfat_threads_init())
+//         lowfat_error("failed to initialize lowfat threads: %s",
+//             strerror(errno));
 
-    // Install SEGV handler.
-    stack_t ss;
-    ss.ss_sp = (uint8_t *)LOWFAT_PAGES_BASE((void *)&ss) -
-        10 * LOWFAT_PAGE_SIZE - SIGSTKSZ;
-    ss.ss_size = SIGSTKSZ;
-    ss.ss_flags = 0;
-    if (sigaltstack(&ss, NULL) == -1)
-        lowfat_error("failed to set signal stack: %s", strerror(errno));
+//     // Install SEGV handler.
+//     stack_t ss;
+//     ss.ss_sp = (uint8_t *)LOWFAT_PAGES_BASE((void *)&ss) -
+//         10 * LOWFAT_PAGE_SIZE - SIGSTKSZ;
+//     ss.ss_size = SIGSTKSZ;
+//     ss.ss_flags = 0;
+//     if (sigaltstack(&ss, NULL) == -1)
+//         lowfat_error("failed to set signal stack: %s", strerror(errno));
 
-    struct sigaction action;
-    memset(&action, 0, sizeof(action));
-    action.sa_sigaction = lowfat_segv_handler;
-    action.sa_flags |= SA_ONSTACK;
-    sigaction(SIGSEGV, &action, NULL);
+//     struct sigaction action;
+//     memset(&action, 0, sizeof(action));
+//     action.sa_sigaction = lowfat_segv_handler;
+//     action.sa_flags |= SA_ONSTACK;
+//     sigaction(SIGSEGV, &action, NULL);
 
-    // Replace stack with LOWFAT stack.
-    lowfat_stack_pivot();
+//     // Replace stack with LOWFAT stack.
+//     lowfat_stack_pivot();
 
-#endif
-#endif /* LOWFAT_DATA_ONLY */
-}
+// #endif
+// #endif /* LOWFAT_DATA_ONLY */
+// }
 
 extern inline size_t lowfat_index(void *ptr);
 extern inline size_t lowfat_size(void *ptr);
@@ -534,69 +534,69 @@ extern void lowfat_oob_check(unsigned info, const void *ptr, size_t size0,
  * before the program starts up, hence the need for some hacks.
  * This code is likely fragile & non-portable.
  */
-extern LOWFAT_NOINLINE void *lowfat_stack_pivot_2(void *stack_top)
-{
-    // Get the stack using the "environment pointer" method.  This assumes
-    // that the environment is stored at the base of the stack, which is
-    // currently true for Linux.  It is also necessary to copy the argv/env
-    // since we patch the stack.
-    if (lowfat_envp == NULL)
-        lowfat_error("failed to get the environment pointer");
-    char **envp = lowfat_envp;
-    lowfat_envp = NULL;
-    uint8_t *stack_bottom = (void *)envp;
-    while (*envp != NULL)
-    {
-        char *var = *envp;
-        uint8_t *end = (uint8_t *)(var + strlen(var) + 1);
-        stack_bottom = (stack_bottom < end? end: stack_bottom);
-        envp++;
-    }
-    stack_bottom = (stack_bottom < (uint8_t *)envp? (uint8_t *)envp:
-        stack_bottom);
-    if (((uintptr_t)stack_bottom % LOWFAT_PAGE_SIZE) != 0)
-        stack_bottom = stack_bottom +
-            (LOWFAT_PAGE_SIZE - (uintptr_t)stack_bottom % LOWFAT_PAGE_SIZE);
+// extern LOWFAT_NOINLINE void *lowfat_stack_pivot_2(void *stack_top)
+// {
+//     // Get the stack using the "environment pointer" method.  This assumes
+//     // that the environment is stored at the base of the stack, which is
+//     // currently true for Linux.  It is also necessary to copy the argv/env
+//     // since we patch the stack.
+//     if (lowfat_envp == NULL)
+//         lowfat_error("failed to get the environment pointer");
+//     char **envp = lowfat_envp;
+//     lowfat_envp = NULL;
+//     uint8_t *stack_bottom = (void *)envp;
+//     while (*envp != NULL)
+//     {
+//         char *var = *envp;
+//         uint8_t *end = (uint8_t *)(var + strlen(var) + 1);
+//         stack_bottom = (stack_bottom < end? end: stack_bottom);
+//         envp++;
+//     }
+//     stack_bottom = (stack_bottom < (uint8_t *)envp? (uint8_t *)envp:
+//         stack_bottom);
+//     if (((uintptr_t)stack_bottom % LOWFAT_PAGE_SIZE) != 0)
+//         stack_bottom = stack_bottom +
+//             (LOWFAT_PAGE_SIZE - (uintptr_t)stack_bottom % LOWFAT_PAGE_SIZE);
 
-    // Copy the stack contents to a new LowFat-allocated stack:
-    size_t size = stack_bottom - (uint8_t *)stack_top;
-    uint8_t *stack_base = (uint8_t *)lowfat_stack_alloc();
-    if (stack_base == NULL)
-        lowfat_error("failed to allocate stack: %s", strerror(errno));
-    stack_base += LOWFAT_STACK_SIZE;
-    memcpy(stack_base - size, stack_top, size);
+//     // Copy the stack contents to a new LowFat-allocated stack:
+//     size_t size = stack_bottom - (uint8_t *)stack_top;
+//     uint8_t *stack_base = (uint8_t *)lowfat_stack_alloc();
+//     if (stack_base == NULL)
+//         lowfat_error("failed to allocate stack: %s", strerror(errno));
+//     stack_base += LOWFAT_STACK_SIZE;
+//     memcpy(stack_base - size, stack_top, size);
 
-    // In some cases the old stack value may be stored on the stack itself,
-    // and restored later.  To fix this we search for and replace old
-    // stack pointers stored on the the stack itself.  There is a small
-    // chance that we may patch an unrelated value.
-    void *old_stack_lo = stack_top, *old_stack_hi = stack_bottom;
-    void **new_stack_lo = (void **)(stack_base - size),
-         **new_stack_hi = (void **)stack_base;
-    for (void **pptr = new_stack_lo; pptr < new_stack_hi; pptr++)
-    {
-        void *ptr = *pptr;
-        if (ptr >= old_stack_lo && ptr <= old_stack_hi)
-        {
-            ssize_t diff = ((uint8_t *)ptr - (uint8_t *)old_stack_lo);
-            void *new_ptr = (uint8_t *)new_stack_lo + diff;
-            *pptr = new_ptr;
-        }
-    }
+//     // In some cases the old stack value may be stored on the stack itself,
+//     // and restored later.  To fix this we search for and replace old
+//     // stack pointers stored on the the stack itself.  There is a small
+//     // chance that we may patch an unrelated value.
+//     void *old_stack_lo = stack_top, *old_stack_hi = stack_bottom;
+//     void **new_stack_lo = (void **)(stack_base - size),
+//          **new_stack_hi = (void **)stack_base;
+//     for (void **pptr = new_stack_lo; pptr < new_stack_hi; pptr++)
+//     {
+//         void *ptr = *pptr;
+//         if (ptr >= old_stack_lo && ptr <= old_stack_hi)
+//         {
+//             ssize_t diff = ((uint8_t *)ptr - (uint8_t *)old_stack_lo);
+//             void *new_ptr = (uint8_t *)new_stack_lo + diff;
+//             *pptr = new_ptr;
+//         }
+//     }
 
-    return stack_base - size;
-}
+//     return stack_base - size;
+// }
 
-__asm__ (
-    "\t.align 16, 0x90\n"
-    "\t.type lowfat_stack_pivot,@function\n"
-    "lowfat_stack_pivot:\n"
-    "\tmovq %rsp, %rdi\n"
-    "\tmovabsq $lowfat_stack_pivot_2, %rax\n"
-    "\tcallq *%rax\n"
-    "\tmovq %rax, %rsp\n"
-    "\tretq\n"
-);
+// __asm__ (
+//     "\t.align 16, 0x90\n"
+//     "\t.type lowfat_stack_pivot,@function\n"
+//     "lowfat_stack_pivot:\n"
+//     "\tmovq %rsp, %rdi\n"
+//     "\tmovabsq $lowfat_stack_pivot_2, %rax\n"
+//     "\tcallq *%rax\n"
+//     "\tmovq %rax, %rsp\n"
+//     "\tretq\n"
+// );
 
 /*
  * This bit of magic ensures lowfat_init() is called very early in process
@@ -604,14 +604,14 @@ __asm__ (
  * object constructors/initializers may be called before lowfat_init().  We
  * also save the environment pointer so we can later derive the stack base.
  */
-void lowfat_preinit(int argc, char **argv, char **envp)
-{
-	lowfat_envp = envp;
-	lowfat_init();
-}
-__attribute__((section(".preinit_array"), used))
-void (*__local_effective_preinit)(int argc, char **argv, char **envp) =
-	lowfat_preinit;
+// void lowfat_preinit(int argc, char **argv, char **envp)
+// {
+// 	lowfat_envp = envp;
+// 	lowfat_init();
+// }
+// __attribute__((section(".preinit_array"), used))
+// void (*__local_effective_preinit)(int argc, char **argv, char **envp) =
+// 	lowfat_preinit;
 
 extern LOWFAT_CONST void* minifat_pointer_package(void *ptr, ssize_t size)
 {
