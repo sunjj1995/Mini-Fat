@@ -234,6 +234,18 @@ extern void *lowfat_malloc(size_t size) {
         return lowfat_fallback_malloc(size);
     }
     else {
+        return ptr;
+    }
+}
+
+extern void *minifat_malloc(size_t size) {
+    uint64_t coded_size = (64 - clz((uint64_t)size)) & 0x3F;
+    uint64_t alloc_size = 1 << coded_size;
+    void *ptr = NULL;
+    if (posix_memalign(&ptr, alloc_size, alloc_size)) {
+        return lowfat_fallback_malloc(size);
+    }
+    else {
         ptr = (void*)((uint64_t)ptr | (coded_size << 58));
         return ptr;
     }

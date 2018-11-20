@@ -350,31 +350,40 @@ static void optimizeMalloc(Module *M, Instruction *I,
         default:
             return;
     }
-    Value *Arg = Call.getArgOperand(0);
-    ConstantInt *Size = dyn_cast<ConstantInt>(Arg);
-    if (Size == nullptr)
-    {
-        // Malloc argument is not a constant; skip.
-        return;
-    }
-    size_t size = Size->getValue().getZExtValue();
-    size_t idx = lowfat_heap_select(size);
+    // Value *Arg = Call.getArgOperand(0);
+    // ConstantInt *Size = dyn_cast<ConstantInt>(Arg);
+    // if (Size == nullptr)
+    // {
+    //     // Malloc argument is not a constant; skip.
+    //     return;
+    // }
+    // size_t size = Size->getValue().getZExtValue();
+    // size_t idx = lowfat_heap_select(size);
 
+    // IRBuilder<> builder(I);
+    // Constant *MallocIdx = M->getOrInsertFunction("lowfat_malloc_index",
+    //     builder.getInt8PtrTy(), builder.getInt64Ty(), builder.getInt64Ty(),
+    //     nullptr);
+    // ConstantInt *Idx = builder.getInt64(idx);
+
+    // 只优化定值的size 我们优化所有，将lowfat_malloc 替换成 minifat_malloc
+    Value *Arg = Call.getArgOperand(0);
+    
     IRBuilder<> builder(I);
-    Constant *MallocIdx = M->getOrInsertFunction("lowfat_malloc_index",
-        builder.getInt8PtrTy(), builder.getInt64Ty(), builder.getInt64Ty(),
-        nullptr);
-    ConstantInt *Idx = builder.getInt64(idx);
+    Constant *Minifat_Malloc = M->getOrInsertFunction("minifat_malloc",
+        builder.getInt8PtrTy(), builder.getInt64Ty(), nullptr);
+
     Value *NewCall = nullptr;
+    Value *Size = builder.CreateBitCast(Arg, builder.getInt64Ty());
     if (auto *Invoke = dyn_cast<InvokeInst>(I))
     {
-        InvokeInst *NewInvoke = builder.CreateInvoke(MallocIdx,
-            Invoke->getNormalDest(), Invoke->getUnwindDest(), {Idx, Size});
+        InvokeInst *NewInvoke = builder.CreateInvoke(Minifat_Malloc,
+            Invoke->getNormalDest(), Invoke->getUnwindDest(), {Size});
         NewInvoke->setDoesNotThrow();
         NewCall = NewInvoke;
     }
     else
-        NewCall = builder.CreateCall(MallocIdx, {Idx, Size});
+        NewCall = builder.CreateCall(Minifat_Malloc, {Size});
     I->replaceAllUsesWith(NewCall);
     dels.push_back(I);
 }
@@ -1932,17 +1941,17 @@ struct LowFat : public ModulePass
         addLowFatFuncs(&M);
 
         // PASS (4): Optimize lowfat_malloc() calls
-        // for (auto &F: M)
-        // {
-        //     if (F.isDeclaration())
-        //         continue;
-        //     vector<Instruction *> dels;
-        //     for (auto &BB: F)
-        //         for (auto &I: BB)
-        //             optimizeMalloc(&M, &I, dels);
-        //     for (auto &I: dels)
-        //         I->eraseFromParent();
-        // }
+        for (auto &F: M)
+        {
+            if (F.isDeclaration())
+                continue;
+            vector<Instruction *> dels;
+            for (auto &BB: F)
+                for (auto &I: BB)
+                    optimizeMalloc(&M, &I, dels);
+            for (auto &I: dels)
+                I->eraseFromParent();
+        }
 
         if (option_debug)
         {
