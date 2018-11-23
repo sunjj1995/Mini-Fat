@@ -1110,6 +1110,8 @@ static void replaceUnsafeLibFuncs(Module *M)
     REPLACE(M, memcpy, false);
     REPLACE(M, memmove, false);
 
+    // minifat 增加
+    REPLACE(M, strlen, true);
     if (option_no_replace_malloc)
         return;
 
