@@ -238,7 +238,7 @@ extern void *lowfat_malloc(size_t size) {
     }
 }
 
-extern void *minifat_malloc(size_t size) {
+/*extern void *minifat_malloc(size_t size) {
     uint64_t coded_size = (64 - clz((uint64_t)size)) & 0x3F;
     uint64_t alloc_size = 1 << coded_size;
     void *ptr = NULL;
@@ -249,8 +249,40 @@ extern void *minifat_malloc(size_t size) {
         ptr = (void*)((uint64_t)ptr | (coded_size << 58));
         return ptr;
     }
+}*/
+
+uint64_t getEncodedSize(size_t size){
+    uint64_t a=clz((uint64_t)size);
+    uint64_t N,B;
+    if(a>=55) {
+        if(a>=61){ N = 1; B = 3;}
+        else{
+            N = (size >> 3) & 0x3F;
+            B = 3;
+            if ( size & 0x3 != 0 ) N=N+1;
+        }
+    }
+    else{
+        B = 64-a-6;
+        N = (size>>B)&0x3F;
+        if( size<<(64-B) != 0) N=N+1;
+    }
+    return (B<<6)|N;
 }
 
+extern void *minifat_malloc(size_t size) {
+    uint64_t codedPrefix = getEncodedSize(size);
+    uint64_t N = codedPrefix&0x3F, B = (codedPrefix>>6)&0x3F;
+    uint64_t alloc_size = N<<B;
+    void *ptr=NULL;
+    if(posix_memalign(&ptr, 1<<B, alloc_size)){
+        return lowfat_fallback_malloc(size);
+    }
+    else{
+        ptr = (void*)((uint64_t)ptr|(codedPrefix<<52));
+        return ptr;
+    }
+}
 /*
  * LOWFAT free()
  */
@@ -413,7 +445,7 @@ extern char *__strndup(const char *str, size_t n)
  * MINIFAT realloc()
  * For now, we assume that the pointer given to realloc() points to the beginning of the object
  */
-extern void *lowfat_realloc(void *ptr, size_t size) {
+/*extern void *lowfat_realloc(void *ptr, size_t size) {
     if (ptr == NULL || size == 0)
         return lowfat_malloc(size);
     void *newptr = lowfat_malloc(size);
@@ -427,8 +459,20 @@ extern void *lowfat_realloc(void *ptr, size_t size) {
     lowfat_free(ptr);
 
     return newptr;
-}
+}*/
 
+extern void *lowfat_realloc(void *ptr, size_t size){
+    if(ptr==NULL||size==0)
+        return minifat_malloc(size);
+    void *newptr=minifat_malloc(size);
+    if(newptr==NULL) return NULL;
+    size_t cpy_size = (((size_t)newptr<<6)>>58)<<((size_t)newptr>>58);
+    size_t ptr_size = (((size_t)ptr<<6)>>58)<<((size_t)ptr>>58);
+    cpy_size = (cpy_size < ptr_size ? cpy_size : ptr_size);
+    memcpy(newptr, ptr, cpy_size);
+    lowfat_free(ptr);
+    return newptr;
+}
 
 /*
  * LOWFAT calloc()

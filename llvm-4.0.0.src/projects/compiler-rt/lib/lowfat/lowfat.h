@@ -51,14 +51,16 @@ extern "C"
     MiniFat use the first 6 pos to show it size and get the base
     MiniFat must ensure that every buffer or variable (to buffer also) aligned!
 */
-#define MINIFAT_MASK (0xFC00000000000000)
-#define MINIFAT_MATCH (0x03FFFFFFFFFFFFFF)
-#define MINIFAT_BASE_SIZE 6
+#define MINIFAT_MASK (0xFFF0000000000000)
+#define MINIFAT_MATCH (0x000FFFFFFFFFFFFF)
+#define MINIFAT_BASE_SIZE 12
 static inline _LOWFAT_CONST _LOWFAT_INLINE void *minifat_base(const void *_ptr)
 {
     unsigned long size_base = MINIFAT_MASK & (unsigned long)_ptr;
     size_base = size_base >> (64 - MINIFAT_BASE_SIZE);
-    unsigned long size = 1 << size_base;
+    unsigned long block_size = size_base >> 6;
+    //unsigned long block_number = size_base & 0x3F;
+    unsigned long size = 1 << block_size;
     // unsigned long mask = 0xFFFFFFFFFFFFFFFF << size;
     return (void *)(size & (unsigned long)_ptr);
 }
@@ -67,7 +69,9 @@ static inline _LOWFAT_CONST _LOWFAT_INLINE size_t minifat_size(const void *_ptr)
 {
     unsigned long size_base = MINIFAT_MASK & (unsigned long)_ptr;
     size_base = size_base >> (64 - MINIFAT_BASE_SIZE);
-    unsigned long size = 1 << size_base;
+    unsigned long block_size = size_base >> 6;
+    unsigned long block_number = size_base & 0x3F;
+    unsigned long size = block_number << block_size;
     return size;
 }
 
